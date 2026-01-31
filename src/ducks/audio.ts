@@ -1,7 +1,10 @@
+import type { Note } from '../utils/notes'
+import { noteToFrequency } from '../utils/notes'
 import type { PresetSound, SoundSource } from './grid'
 
 let audioContext: AudioContext | null = null
 let noiseBuffer: AudioBuffer | null = null
+const bufferCache = new Map<string, AudioBuffer>()
 
 export const presetLabel: Record<PresetSound, string> = {
   kick: 'Kick',
@@ -83,8 +86,107 @@ export const playSound = async (source: SoundSource) => {
     await playPreset(source.preset)
     return
   }
+  if (source.kind === 'midi') {
+    const context = await ensureAudioContext()
+    const now = context.currentTime
+    const osc = context.createOscillator()
+    const gain = context.createGain()
+    osc.type = source.waveform
+    osc.frequency.setValueAtTime(220, now)
+    gain.gain.setValueAtTime(0.3, now)
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4)
+    osc.connect(gain).connect(context.destination)
+    osc.start(now)
+    osc.stop(now + 0.4)
+    return
+  }
+
+  if (!source.url) {
+    return
+  }
 
   const audio = new Audio(source.url)
   audio.volume = 0.9
   audio.play().catch(() => {})
+}
+
+const loadAudioBuffer = async (url: string) => {
+  if (bufferCache.has(url)) {
+    return bufferCache.get(url)!
+  }
+  const response = await fetch(url)
+  const arrayBuffer = await response.arrayBuffer()
+  const context = await ensureAudioContext()
+  const buffer = await context.decodeAudioData(arrayBuffer)
+  bufferCache.set(url, buffer)
+  return buffer
+}
+
+export const playInstrumentNote = async ({
+  source,
+  note,
+  baseNote,
+  delayMs = 0,
+  durationMs = 220,
+}: {
+  source: SoundSource
+  note: Note
+  baseNote: Note
+  delayMs?: number
+  durationMs?: number
+}) => {
+  const context = await ensureAudioContext()
+  const startTime = context.currentTime + delayMs / 1000
+  const durationSeconds = durationMs / 1000
+
+  if (source.kind === 'midi') {
+    const osc = context.createOscillator()
+    const gain = context.createGain()
+    osc.type = source.waveform
+    osc.frequency.setValueAtTime(noteToFrequency(note), startTime)
+    gain.gain.setValueAtTime(0.4, startTime)
+    gain.gain.exponentialRampToValueAtTime(0.001, startTime + durationSeconds)
+    osc.connect(gain).connect(context.destination)
+    osc.start(startTime)
+    osc.stop(startTime + durationSeconds)
+    return
+  }
+
+  if (source.kind === 'preset') {
+    await playPreset(source.preset)
+    return
+  }
+
+  if (!source.url) {
+    return
+  }
+  const playbackRate = noteToFrequency(note) / noteToFrequency(baseNote)
+  try {
+    const buffer = await loadAudioBuffer(source.url)
+    const node = context.createBufferSource()
+    const gain = context.createGain()
+    node.buffer = buffer
+    node.playbackRate.setValueAtTime(playbackRate, startTime)
+    gain.gain.setValueAtTime(0.7, startTime)
+    gain.gain.exponentialRampToValueAtTime(0.001, startTime + durationSeconds)
+    node.connect(gain).connect(context.destination)
+    node.start(startTime)
+    node.stop(startTime + durationSeconds)
+  } catch {
+    const audio = new Audio(source.url)
+    audio.playbackRate = playbackRate
+    const play = () => {
+      audio.currentTime = 0
+      audio.play().catch(() => {})
+      window.setTimeout(() => {
+        audio.pause()
+      }, durationMs)
+    }
+    const delay = Math.max(0, delayMs)
+    if (delay > 0) {
+      window.setTimeout(play, delay)
+    } else {
+      play()
+    }
+  }
 }

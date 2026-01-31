@@ -3,6 +3,7 @@ import { z } from 'zod'
 
 import { ensureAudioContext } from './audio'
 import { registerObjectUrl } from '../utils/objectUrls'
+import type { AppStore } from '../store/useAppStore'
 
 export const recordingStatusSchema = z.enum(['idle', 'recording', 'review'])
 export type RecordingStatus = z.infer<typeof recordingStatusSchema>
@@ -123,7 +124,9 @@ export const drawLiveWaveform = (canvas: HTMLCanvasElement | null) => {
 
   const draw = () => {
     recordingAnimationRef.current = requestAnimationFrame(draw)
-    analyser.getByteTimeDomainData(liveDataRef.current!)
+    analyser.getByteTimeDomainData(
+      liveDataRef.current as Uint8Array<ArrayBuffer>,
+    )
     ctx.fillStyle = '#0f172a'
     ctx.fillRect(0, 0, canvas.width, canvas.height)
     ctx.lineWidth = 2
@@ -214,7 +217,7 @@ const audioBufferToWav = (buffer: AudioBuffer) => {
 }
 
 export const createRecordingSlice: StateCreator<
-  RecordingSlice,
+  AppStore,
   [],
   [],
   RecordingSlice

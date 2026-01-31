@@ -13,8 +13,8 @@ export type AppStore = SequencerSlice & GridSlice & RecordingSlice
 
 const initialSteps = BEATS_PER_MEASURE * 1
 
-export const useAppStore = create<AppStore>((set, get) => ({
-  ...createSequencerSlice(set, get),
-  ...createGridSlice(createInitialRows(initialSteps))(set, get),
-  ...createRecordingSlice(set, get),
+export const useAppStore = create<AppStore>((set, get, api) => ({
+  ...createSequencerSlice(set, get, api),
+  ...createGridSlice(createInitialRows(initialSteps))(set, get, api),
+  ...createRecordingSlice(set, get, api),
 }))

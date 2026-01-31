@@ -3,6 +3,7 @@ import type { StateCreator } from 'zustand'
 import { ensureAudioContext } from './audio'
 import { BEATS_PER_MEASURE, DEFAULT_BPM } from '../utils/constants'
 import type { Row } from './grid'
+import type { AppStore } from '../store/useAppStore'
 
 export type SequencerState = {
   bpm: number
@@ -13,6 +14,7 @@ export type SequencerState = {
 
 export type SequencerActions = {
   setBpm: (bpm: number) => void
+  setMeasures: (measures: number) => void
   updateMeasures: (nextMeasures: number) => void
   togglePlayback: () => Promise<void>
   setIsPlaying: (isPlaying: boolean) => void
@@ -23,16 +25,17 @@ export type SequencerActions = {
 export type SequencerSlice = SequencerState & SequencerActions
 
 export const createSequencerSlice: StateCreator<
-  SequencerSlice,
+  AppStore,
   [],
   [],
   SequencerSlice
-> = (set, get) => ({
+> = (set) => ({
   bpm: DEFAULT_BPM,
   measures: 1,
   currentStep: 0,
   isPlaying: false,
   setBpm: (bpm) => set({ bpm }),
+  setMeasures: (measures) => set({ measures, currentStep: 0 }),
   updateMeasures: (nextMeasures) => {
     const nextSteps = BEATS_PER_MEASURE * nextMeasures
     set((state) => {
@@ -47,8 +50,14 @@ export const createSequencerSlice: StateCreator<
           if (row.steps.length === nextSteps) {
             return row
           }
+          if (row.type === 'rhythm') {
+            const resizedSteps = Array.from({ length: nextSteps }, (_, index) =>
+              row.steps[index] ?? false,
+            )
+            return { ...row, steps: resizedSteps }
+          }
           const resizedSteps = Array.from({ length: nextSteps }, (_, index) =>
-            row.steps[index] ?? false,
+            row.steps[index] ?? [null, null, null, null],
           )
           return { ...row, steps: resizedSteps }
         }),

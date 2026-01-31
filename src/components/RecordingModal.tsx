@@ -2,6 +2,16 @@ import { useMemo } from 'react'
 
 import { useRecordingModal } from '../hooks/useRecordingModal'
 import { useAppStore } from '../store/useAppStore'
+import { NOTE_OPTIONS } from '../utils/notes'
+import { Button } from './ui/button'
+import { Card } from './ui/card'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from './ui/select'
 
 export const RecordingModal = () => {
   const recordModalRowId = useAppStore((state) => state.recordModalRowId)
@@ -19,6 +29,7 @@ export const RecordingModal = () => {
   const setTrimEnd = useAppStore((state) => state.setTrimEnd)
   const playTrimPreview = useAppStore((state) => state.playTrimPreview)
   const stopTrimPreview = useAppStore((state) => state.stopTrimPreview)
+  const setRowBaseNote = useAppStore((state) => state.setRowBaseNote)
 
   const { liveCanvasRef, recordedCanvasRef } = useRecordingModal()
 
@@ -35,7 +46,7 @@ export const RecordingModal = () => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
-      <div className="w-full max-w-2xl rounded-xl border border-slate-800 bg-slate-950 p-5 shadow-2xl">
+      <Card className="w-full max-w-2xl bg-slate-950 p-5 shadow-2xl">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
@@ -45,12 +56,7 @@ export const RecordingModal = () => {
               {recordingRow?.name ?? 'Sound'}
             </h3>
           </div>
-          <button
-            onClick={closeRecordModal}
-            className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:border-slate-500"
-          >
-            Close
-          </button>
+          <Button onClick={closeRecordModal}>Close</Button>
         </div>
 
         {recordingStatus === 'idle' && (
@@ -59,12 +65,14 @@ export const RecordingModal = () => {
               Press start to record a new sound. Recording stops when you press
               the space bar.
             </p>
-            <button
+            <Button
               onClick={startModalRecording}
-              className="w-fit rounded-md bg-emerald-500/90 px-3 py-2 text-xs font-semibold text-emerald-950 hover:bg-emerald-400"
+              variant="secondary"
+              size="default"
+              className="w-fit bg-emerald-500/90 text-emerald-950 hover:bg-emerald-400"
             >
               Start recording
-            </button>
+            </Button>
           </div>
         )}
 
@@ -80,12 +88,14 @@ export const RecordingModal = () => {
               height={160}
               className="w-full rounded-lg border border-slate-800 bg-slate-900"
             />
-            <button
+            <Button
               onClick={stopModalRecording}
-              className="w-fit rounded-md border border-red-400 px-3 py-2 text-xs font-semibold text-red-200 hover:border-red-300"
+              variant="destructive"
+              size="default"
+              className="w-fit"
             >
               Stop recording
-            </button>
+            </Button>
           </div>
         )}
 
@@ -98,6 +108,31 @@ export const RecordingModal = () => {
               <p className="mt-1 text-xs text-slate-500">
                 Duration: {recordingDuration.toFixed(2)}s
               </p>
+              {recordingRow?.type === 'instrument' && (
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-300">
+                  <span className="text-slate-400">Base note</span>
+                  <Select
+                    value={recordingRow.baseNote}
+                    onValueChange={(value) =>
+                      setRowBaseNote(
+                        recordingRow.id,
+                        value as typeof recordingRow.baseNote,
+                      )
+                    }
+                  >
+                    <SelectTrigger className="h-7">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {NOTE_OPTIONS.map((note) => (
+                        <SelectItem key={note} value={note}>
+                          {note}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
 
             <canvas
@@ -149,35 +184,31 @@ export const RecordingModal = () => {
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
-              <button
-                onClick={startModalRecording}
-                className="rounded-md border border-slate-700 px-3 py-2 text-xs text-slate-200 hover:border-slate-500"
-              >
+              <Button onClick={startModalRecording} variant="outline">
                 Record again
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={isPreviewingTrim ? stopTrimPreview : playTrimPreview}
                 disabled={!recordedBuffer}
-                className="rounded-md border border-slate-700 px-3 py-2 text-xs text-slate-200 hover:border-slate-500 disabled:cursor-not-allowed disabled:border-slate-800 disabled:text-slate-500"
+                variant="outline"
               >
                 {isPreviewingTrim ? 'Stop preview' : 'Play trimmed'}
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={saveRecordingToRow}
-                className="rounded-md bg-emerald-500/90 px-3 py-2 text-xs font-semibold text-emerald-950 hover:bg-emerald-400"
+                variant="secondary"
+                size="default"
+                className="bg-emerald-500/90 text-emerald-950 hover:bg-emerald-400"
               >
                 Save recording
-              </button>
-              <button
-                onClick={closeRecordModal}
-                className="rounded-md border border-slate-700 px-3 py-2 text-xs text-slate-200 hover:border-slate-500"
-              >
+              </Button>
+              <Button onClick={closeRecordModal} variant="outline">
                 Discard
-              </button>
+              </Button>
             </div>
           </div>
         )}
-      </div>
+      </Card>
     </div>
   )
 }

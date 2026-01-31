@@ -1,5 +1,10 @@
+import { useRef, useState } from 'react'
+
 import { useAppStore } from '../store/useAppStore'
+import { buildSharePackage, hydrateSharePackage, parseSharePackage } from '../utils/share'
 import { GridRow } from './GridRow'
+import { Button } from './ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 
 export const Grid = () => {
   const rows = useAppStore((state) => state.rows)
@@ -7,37 +12,114 @@ export const Grid = () => {
   const addRow = useAppStore((state) => state.addRow)
   const collapsedRows = useAppStore((state) => state.collapsedRows)
   const toggleAllRowConfigs = useAppStore((state) => state.toggleAllRowConfigs)
+  const bpm = useAppStore((state) => state.bpm)
+  const measures = useAppStore((state) => state.measures)
+  const setRows = useAppStore((state) => state.setRows)
+  const setBpm = useAppStore((state) => state.setBpm)
+  const setMeasures = useAppStore((state) => state.setMeasures)
+  const resetStep = useAppStore((state) => state.resetStep)
+  const setIsPlaying = useAppStore((state) => state.setIsPlaying)
+  const missingAssets = useAppStore((state) => state.missingAssets)
+  const setMissingAssets = useAppStore((state) => state.setMissingAssets)
+  const clearMissingAssets = useAppStore((state) => state.clearMissingAssets)
+
+  const [isExporting, setIsExporting] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const allCollapsed =
     rows.length > 0 && rows.every((row) => collapsedRows[row.id])
 
+  const handleExport = async () => {
+    setIsExporting(true)
+    try {
+      const blob = await buildSharePackage({ bpm, measures, rows })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `music-pad-sequence-${Date.now()}.json`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
+  const handleImport = async (file: File) => {
+    const text = await file.text()
+    const parsed = parseSharePackage(text)
+    const hydrated = hydrateSharePackage(parsed)
+    setIsPlaying(false)
+    setBpm(hydrated.bpm)
+    setMeasures(hydrated.measures)
+    setRows(hydrated.rows)
+    resetStep()
+    setMissingAssets(hydrated.missing)
+  }
+
   return (
-    <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold text-slate-100">Grid</h2>
+    <Card>
+      {missingAssets.length > 0 && (
+        <div className="mx-4 mt-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+          <span>
+            Missing audio files for: {missingAssets.join(', ')}. Using presets instead.
+          </span>
+          <Button
+            onClick={clearMissingAssets}
+            variant="outline"
+            className="border-amber-400/60 text-amber-100 hover:border-amber-300"
+          >
+            Dismiss
+          </Button>
+        </div>
+      )}
+      <CardHeader className="flex-row items-center justify-between space-y-0">
+        <CardTitle>Grid</CardTitle>
         <div className="flex items-center gap-2">
-          <button
+          <Button
+            onClick={handleExport}
+            disabled={isExporting}
+          >
+            {isExporting ? 'Exporting…' : 'Export'}
+          </Button>
+          <Button
+            onClick={() => fileInputRef.current?.click()}
+          >
+            Import
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/json"
+            onChange={(event) => {
+              const file = event.target.files?.[0]
+              if (!file) return
+              void handleImport(file)
+              event.target.value = ''
+            }}
+            className="hidden"
+          />
+          <Button
             onClick={toggleAllRowConfigs}
-            className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:border-slate-500"
           >
             {allCollapsed ? 'Show all configs' : 'Minimize rows'}
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={addRow}
-            className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:border-slate-500"
           >
             Add sound row
-          </button>
+          </Button>
         </div>
-      </div>
+      </CardHeader>
 
-      <div className="mt-4 overflow-x-auto">
+      <CardContent className="overflow-x-auto">
         <div className="grid gap-3">
           {rows.map((row) => (
             <GridRow key={row.id} row={row} currentStep={currentStep} />
           ))}
         </div>
-      </div>
-    </section>
+      </CardContent>
+    </Card>
   )
 }
