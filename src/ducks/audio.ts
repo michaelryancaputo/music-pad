@@ -105,9 +105,24 @@ export const playSound = async (source: SoundSource) => {
     return
   }
 
-  const audio = new Audio(source.url)
-  audio.volume = 0.9
-  audio.play().catch(() => {})
+  try {
+    const context = await ensureAudioContext()
+    const buffer = await loadAudioBuffer(source.url)
+    const node = context.createBufferSource()
+    const gain = context.createGain()
+    node.buffer = buffer
+    gain.gain.setValueAtTime(0.9, context.currentTime)
+    gain.gain.exponentialRampToValueAtTime(
+      0.001,
+      context.currentTime + Math.min(0.4, buffer.duration),
+    )
+    node.connect(gain).connect(context.destination)
+    node.start()
+  } catch {
+    const audio = new Audio(source.url)
+    audio.volume = 0.9
+    audio.play().catch(() => {})
+  }
 }
 
 const loadAudioBuffer = async (url: string) => {

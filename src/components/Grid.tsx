@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 
+import type { Row } from '../ducks/grid'
 import { useAppStore } from '../store/useAppStore'
 import { buildSharePackage, hydrateSharePackage, parseSharePackage } from '../utils/share'
 import { GridRow } from './GridRow'
@@ -10,8 +11,6 @@ export const Grid = () => {
   const rows = useAppStore((state) => state.rows)
   const currentStep = useAppStore((state) => state.currentStep)
   const addRow = useAppStore((state) => state.addRow)
-  const collapsedRows = useAppStore((state) => state.collapsedRows)
-  const toggleAllRowConfigs = useAppStore((state) => state.toggleAllRowConfigs)
   const bpm = useAppStore((state) => state.bpm)
   const measures = useAppStore((state) => state.measures)
   const setRows = useAppStore((state) => state.setRows)
@@ -25,9 +24,6 @@ export const Grid = () => {
 
   const [isExporting, setIsExporting] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
-
-  const allCollapsed =
-    rows.length > 0 && rows.every((row) => collapsedRows[row.id])
 
   const handleExport = async () => {
     setIsExporting(true)
@@ -53,13 +49,13 @@ export const Grid = () => {
     setIsPlaying(false)
     setBpm(hydrated.bpm)
     setMeasures(hydrated.measures)
-    setRows(hydrated.rows)
+    setRows(hydrated.rows as Row[])
     resetStep()
     setMissingAssets(hydrated.missing)
   }
 
   return (
-    <Card>
+    <Card className="border-slate-800/60 bg-slate-950/40">
       {missingAssets.length > 0 && (
         <div className="mx-4 mt-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
           <span>
@@ -74,8 +70,10 @@ export const Grid = () => {
           </Button>
         </div>
       )}
-      <CardHeader className="flex-row items-center justify-between space-y-0">
-        <CardTitle>Grid</CardTitle>
+      <CardHeader className="flex-row items-center justify-between space-y-0 border-b border-slate-800/60">
+        <CardTitle className="text-sm uppercase tracking-[0.16em] text-slate-300">
+          Grid
+        </CardTitle>
         <div className="flex items-center gap-2">
           <Button
             onClick={handleExport}
@@ -100,11 +98,6 @@ export const Grid = () => {
             }}
             className="hidden"
           />
-          <Button
-            onClick={toggleAllRowConfigs}
-          >
-            {allCollapsed ? 'Show all configs' : 'Minimize rows'}
-          </Button>
           <Button
             onClick={addRow}
           >

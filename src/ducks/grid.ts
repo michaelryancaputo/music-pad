@@ -130,8 +130,6 @@ export type GridActions = {
   applyPendingMutes: () => void
   addRow: () => void
   removeRow: (rowId: string) => void
-  toggleRowConfig: (rowId: string) => void
-  toggleAllRowConfigs: () => void
   setRowRecording: (rowId: string, isRecording: boolean) => void
   handleFileChange: (rowId: string, event: ChangeEvent<HTMLInputElement>) => void
   setRows: (rows: Row[]) => void
@@ -209,9 +207,12 @@ export const createGridSlice =
               pendingMute: row.pendingMute,
             }
           }
-          const rhythmSteps = row.steps.map((step) =>
-            step.some((note) => Boolean(note)),
-          )
+          const rhythmSteps =
+            row.type === 'instrument'
+              ? row.steps.map((step) =>
+                  step.some((note: Note | null) => Boolean(note)),
+                )
+              : row.steps
           return {
             type: 'rhythm',
             id: row.id,
@@ -316,29 +317,6 @@ export const createGridSlice =
       set((state) => ({
         rows: state.rows.filter((row) => row.id !== rowId),
       }))
-    },
-    toggleRowConfig: (rowId) => {
-      set((state) => ({
-        collapsedRows: {
-          ...state.collapsedRows,
-          [rowId]: !state.collapsedRows[rowId],
-        },
-      }))
-    },
-    toggleAllRowConfigs: () => {
-      set((state) => {
-        const allCollapsed = state.rows.every(
-          (row) => state.collapsedRows[row.id],
-        )
-        const nextCollapsed = state.rows.reduce<Record<string, boolean>>(
-          (acc, row) => {
-            acc[row.id] = !allCollapsed
-            return acc
-          },
-          {},
-        )
-        return { collapsedRows: nextCollapsed }
-      })
     },
     setRowRecording: (rowId, isRecording) => {
       set((state) => ({

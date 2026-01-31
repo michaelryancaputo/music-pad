@@ -18,6 +18,7 @@ export type SequencerActions = {
   updateMeasures: (nextMeasures: number) => void
   togglePlayback: () => Promise<void>
   setIsPlaying: (isPlaying: boolean) => void
+  setCurrentStep: (step: number) => void
   advanceStep: (steps: number) => void
   resetStep: () => void
 }
@@ -36,6 +37,7 @@ export const createSequencerSlice: StateCreator<
   isPlaying: false,
   setBpm: (bpm) => set({ bpm }),
   setMeasures: (measures) => set({ measures, currentStep: 0 }),
+  setCurrentStep: (step) => set({ currentStep: step }),
   updateMeasures: (nextMeasures) => {
     const nextSteps = BEATS_PER_MEASURE * nextMeasures
     set((state) => {

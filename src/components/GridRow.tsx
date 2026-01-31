@@ -32,8 +32,6 @@ export const GridRow = ({ row, currentStep }: GridRowProps) => {
   const toggleRowMute = useAppStore((state) => state.toggleRowMute)
   const recordingStatus = useAppStore((state) => state.recordingStatus)
   const recordModalRowId = useAppStore((state) => state.recordModalRowId)
-  const toggleRowConfig = useAppStore((state) => state.toggleRowConfig)
-  const collapsedRows = useAppStore((state) => state.collapsedRows)
 
   const sourceLabel =
     row.source.kind === 'preset'
@@ -43,7 +41,6 @@ export const GridRow = ({ row, currentStep }: GridRowProps) => {
         : row.source.fileName
   const isRowRecording =
     recordingStatus === 'recording' && recordModalRowId === row.id
-  const isCollapsed = collapsedRows[row.id] ?? false
   const muteLabel = row.isMuted
     ? row.pendingMute === false
       ? 'Unmute (next)'
@@ -51,248 +48,257 @@ export const GridRow = ({ row, currentStep }: GridRowProps) => {
     : row.pendingMute === true
       ? 'Mute (next)'
       : 'Mute'
-  const getNextNote = (note: Note | null) => {
-    if (!note) {
-      return NOTE_OPTIONS[0] ?? null
-    }
-    const index = NOTE_OPTIONS.indexOf(note)
-    if (index === -1 || index === NOTE_OPTIONS.length - 1) {
-      return null
-    }
-    return NOTE_OPTIONS[index + 1]
-  }
-
   return (
-    <div
-      className="grid items-center gap-2 rounded-lg border border-slate-800/70 bg-slate-950/50 p-2 lg:grid-cols-[210px_1fr]"
-    >
-      {isCollapsed ? (
-        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-200">
-          <div className="flex flex-col gap-1">
-            <span className="font-semibold">{row.name || 'Untitled row'}</span>
-            <span className="text-[11px] text-slate-500">
-              {row.type === 'instrument' ? `Instrument · ${sourceLabel}` : sourceLabel}
-            </span>
-          </div>
-          <Button onClick={() => toggleRowConfig(row.id)}>
-            Show config
-          </Button>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-2">
-          <Input
-            value={row.name}
-            onChange={(event) => updateRowName(row.id, event.target.value)}
-            className="h-8 text-xs"
-            placeholder="Sound name"
-          />
-
-          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-400">
-            <span>Type:</span>
-            <Select
-              value={row.type}
-              onValueChange={(value) => setRowType(row.id, value as Row['type'])}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="rhythm">Rhythm</SelectItem>
-                <SelectItem value="instrument">Instrument</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-400">
-            <span>Source:</span>
-            <span className="rounded-full bg-slate-800 px-2 py-1">
-              {sourceLabel}
-            </span>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-300">
-            {row.type === 'rhythm' ? (
-              <Select
-                value={row.source.kind === 'preset' ? row.source.preset : ''}
-                onValueChange={(value) =>
-                  updateRowSource(row.id, {
-                    kind: 'preset',
-                    preset: value as PresetSound,
-                  })
-                }
+    <div className="grid items-center gap-1 rounded-lg border border-slate-800/70 bg-slate-950/50 p-1 lg:grid-cols-[200px_1fr]">
+      <div className="relative flex flex-col gap-1.5">
+          <div className="flex items-center justify-between gap-1.5">
+            <Input
+              value={row.name}
+              onChange={(event) => updateRowName(row.id, event.target.value)}
+              className="h-7 text-xs"
+              placeholder="Sound name"
+            />
+            <div className="group/config relative">
+              <button
+                type="button"
+                className="h-7 w-7 rounded-md border border-slate-700/70 bg-slate-950/60 text-[11px] text-slate-400 transition hover:border-slate-500"
               >
-                <SelectTrigger>
-                  <SelectValue placeholder="Choose preset" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="kick">Kick</SelectItem>
-                  <SelectItem value="snare">Snare</SelectItem>
-                  <SelectItem value="hat">Hi-hat</SelectItem>
-                </SelectContent>
-              </Select>
-            ) : (
-              <>
-                <Select
-                  value={row.baseNote}
-                  onValueChange={(value) =>
-                    setRowBaseNote(row.id, value as typeof row.baseNote)
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {NOTE_OPTIONS.map((note) => (
-                      <SelectItem key={note} value={note}>
-                        Base {note}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                •••
+              </button>
+              <div className="pointer-events-none absolute right-0 z-20 mt-0 w-56 rounded-md border border-slate-800/70 bg-slate-950/95 p-2 text-[11px] text-slate-300 opacity-0 shadow-lg transition group-hover/config:pointer-events-auto group-hover/config:opacity-100">
+                <div className="flex flex-col gap-2">
+                  <div className="flex flex-wrap items-center gap-1.5 text-slate-400">
+                    <span className="uppercase tracking-[0.2em] text-[10px] text-slate-500">
+                      Type
+                    </span>
+                    <Select
+                      value={row.type}
+                      onValueChange={(value) =>
+                        setRowType(row.id, value as Row['type'])
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="rhythm">Rhythm</SelectItem>
+                        <SelectItem value="instrument">Instrument</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-                <Select
-                  value={row.source.kind === 'midi' ? 'midi' : 'sample'}
-                  onValueChange={(value) => {
-                    if (value === 'midi') {
-                      updateRowSource(row.id, {
-                        kind: 'midi',
-                        waveform: 'sine',
-                      })
-                      return
-                    }
-                    if (row.source.kind === 'midi') {
-                      updateRowSource(row.id, {
-                        kind: 'file',
-                        fileName: 'Select sample',
-                        url: '',
-                      })
-                    }
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="sample">Sample</SelectItem>
-                    <SelectItem value="midi">MIDI</SelectItem>
-                  </SelectContent>
-                </Select>
+                  <div className="flex flex-wrap items-center gap-1.5 text-slate-400">
+                    <span className="uppercase tracking-[0.2em] text-[10px] text-slate-500">
+                      Source
+                    </span>
+                    <span className="rounded-full bg-slate-800/70 px-2 py-1">
+                      {sourceLabel}
+                    </span>
+                  </div>
 
-                {row.source.kind === 'midi' && (
-                  <Select
-                    value={row.source.waveform}
-                    onValueChange={(value) =>
-                      updateRowSource(row.id, {
-                        kind: 'midi',
-                        waveform: value as
-                          | 'sine'
-                          | 'triangle'
-                          | 'square'
-                          | 'sawtooth',
-                      })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="sine">Sine</SelectItem>
-                      <SelectItem value="triangle">Triangle</SelectItem>
-                      <SelectItem value="square">Square</SelectItem>
-                      <SelectItem value="sawtooth">Saw</SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
-              </>
-            )}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {row.type === 'rhythm' ? (
+                      <Select
+                        value={
+                          row.source.kind === 'preset' ? row.source.preset : ''
+                        }
+                        onValueChange={(value) =>
+                          updateRowSource(row.id, {
+                            kind: 'preset',
+                            preset: value as PresetSound,
+                          })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Choose preset" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="kick">Kick</SelectItem>
+                          <SelectItem value="snare">Snare</SelectItem>
+                          <SelectItem value="hat">Hi-hat</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <>
+                        <Select
+                          value={row.baseNote}
+                          onValueChange={(value) =>
+                            setRowBaseNote(row.id, value as typeof row.baseNote)
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {NOTE_OPTIONS.map((note) => (
+                              <SelectItem key={note} value={note}>
+                                Base {note}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
 
-            <Button asChild>
-              <label className="cursor-pointer">
-                Choose file
-                <input
-                  type="file"
-                  accept="audio/*"
-                  onChange={(event) => handleFileChange(row.id, event)}
-                  className="hidden"
-                />
-              </label>
-            </Button>
+                        <Select
+                          value={row.source.kind === 'midi' ? 'midi' : 'sample'}
+                          onValueChange={(value) => {
+                            if (value === 'midi') {
+                              updateRowSource(row.id, {
+                                kind: 'midi',
+                                waveform: 'sine',
+                              })
+                              return
+                            }
+                            if (row.source.kind === 'midi') {
+                              updateRowSource(row.id, {
+                                kind: 'file',
+                                fileName: 'Select sample',
+                                url: '',
+                              })
+                            }
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="sample">Sample</SelectItem>
+                            <SelectItem value="midi">MIDI</SelectItem>
+                          </SelectContent>
+                        </Select>
 
-            <Button
-              onClick={() => openRecordModal(row.id)}
-              disabled={
-                recordingStatus === 'recording' && recordModalRowId !== row.id
-              }
-              variant={isRowRecording ? 'destructive' : 'outline'}
-            >
-              {isRowRecording ? 'Recording...' : 'Record'}
-            </Button>
+                        {row.source.kind === 'midi' && (
+                          <Select
+                            value={row.source.waveform}
+                            onValueChange={(value) =>
+                              updateRowSource(row.id, {
+                                kind: 'midi',
+                                waveform: value as
+                                  | 'sine'
+                                  | 'triangle'
+                                  | 'square'
+                                  | 'sawtooth',
+                              })
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="sine">Sine</SelectItem>
+                              <SelectItem value="triangle">Triangle</SelectItem>
+                              <SelectItem value="square">Square</SelectItem>
+                              <SelectItem value="sawtooth">Saw</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
+                      </>
+                    )}
 
-            <Button
-              onClick={() => removeRow(row.id)}
-              variant="destructive"
-            >
-              Remove
-            </Button>
-            <Button
-              onClick={() => toggleRowMute(row.id)}
-              variant="outline"
-              className={row.isMuted ? 'border-amber-400 text-amber-200 hover:border-amber-300' : ''}
-            >
-              {muteLabel}
-            </Button>
+                    <Button asChild>
+                      <label className="cursor-pointer">
+                        Choose file
+                        <input
+                          type="file"
+                          accept="audio/*"
+                          onChange={(event) => handleFileChange(row.id, event)}
+                          className="hidden"
+                        />
+                      </label>
+                    </Button>
 
-            <Button
-              onClick={() => toggleRowConfig(row.id)}
-            >
-              Hide config
-            </Button>
+                    <Button
+                      onClick={() => openRecordModal(row.id)}
+                      disabled={
+                        recordingStatus === 'recording' &&
+                        recordModalRowId !== row.id
+                      }
+                      variant={isRowRecording ? 'destructive' : 'outline'}
+                    >
+                      {isRowRecording ? 'Recording...' : 'Record'}
+                    </Button>
+
+                    <Button onClick={() => removeRow(row.id)} variant="destructive">
+                      Remove
+                    </Button>
+                    <Button
+                      onClick={() => toggleRowMute(row.id)}
+                      variant="outline"
+                      className={
+                        row.isMuted
+                          ? 'border-amber-400 text-amber-200 hover:border-amber-300'
+                          : ''
+                      }
+                    >
+                      {muteLabel}
+                    </Button>
+
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-      )}
 
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(28px,1fr))] gap-1">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(24px,1fr))] gap-1">
         {row.type === 'rhythm'
-          ? row.steps.map((isActive, stepIndex) => (
-              <StepCell
-                key={`${row.id}-${stepIndex}`}
-                isActive={isActive}
-                isCurrent={stepIndex === currentStep}
-                onClick={() => toggleCell(row.id, stepIndex)}
-              />
-            ))
+          ? row.steps.map((isActive, stepIndex) => {
+              return (
+                <StepCell
+                  key={`${row.id}-${stepIndex}`}
+                  isActive={isActive}
+                  isCurrent={stepIndex === currentStep}
+                  onClick={() => toggleCell(row.id, stepIndex)}
+                />
+              )
+            })
           : row.steps.map((stepNotes, stepIndex) => (
               <div
                 key={`${row.id}-${stepIndex}`}
                 className={`aspect-square rounded-md border p-0.5 ${
-                  stepIndex === currentStep ? 'border-slate-200' : 'border-slate-800/80'
-                } bg-slate-950/40`}
+                  stepIndex === currentStep
+                    ? 'border-slate-200 bg-slate-800/60'
+                    : 'border-slate-800/80 bg-slate-950/40'
+                } ${stepIndex % 4 === 0 ? 'ring-1 ring-slate-700/70' : ''}`}
               >
                 <div className="grid h-full grid-cols-4 gap-0.5">
                   {stepNotes.map((note, subIndex) => (
-                    <button
+                    <select
                       key={`${row.id}-${stepIndex}-${subIndex}`}
-                      onClick={() =>
+                      value={note ?? ''}
+                      onChange={(event) =>
                         setInstrumentStepNote(
                           row.id,
                           stepIndex,
                           subIndex,
-                          getNextNote(note),
+                          event.target.value
+                            ? (event.target.value as Note)
+                            : null,
                         )
                       }
-                      className={`flex items-center justify-center rounded-sm border text-[9px] transition-colors ${
+                      title={note ? `Note ${note}` : 'Select note'}
+                      className={`h-full w-full appearance-none rounded-sm border px-0.5 text-center text-[9px] ${
                         note
                           ? 'border-indigo-300 bg-indigo-400/80 text-slate-950'
-                          : 'border-slate-800/80 text-slate-500 hover:border-slate-600'
+                          : 'border-slate-800/80 bg-slate-950/60 text-slate-500'
                       }`}
                     >
-                      {note ?? ''}
-                    </button>
+                      <option value="">+</option>
+                      {NOTE_OPTIONS.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
                   ))}
                 </div>
               </div>
             ))}
       </div>
+      {row.type === 'instrument' && (
+        <div className="mt-1 text-[10px] text-slate-500">
+          Use the dropdown in each tile to set pitch.
+        </div>
+      )}
     </div>
   )
 }

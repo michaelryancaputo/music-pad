@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { subscribeWithSelector } from 'zustand/middleware'
 
 import { createGridSlice, createInitialRows } from '../ducks/grid'
 import { createRecordingSlice } from '../ducks/recording'
@@ -13,8 +14,10 @@ export type AppStore = SequencerSlice & GridSlice & RecordingSlice
 
 const initialSteps = BEATS_PER_MEASURE * 1
 
-export const useAppStore = create<AppStore>((set, get, api) => ({
-  ...createSequencerSlice(set, get, api),
-  ...createGridSlice(createInitialRows(initialSteps))(set, get, api),
-  ...createRecordingSlice(set, get, api),
-}))
+export const useAppStore = create<AppStore>()(
+  subscribeWithSelector((set, get, api) => ({
+    ...createSequencerSlice(set, get, api),
+    ...createGridSlice(createInitialRows(initialSteps))(set, get, api),
+    ...createRecordingSlice(set, get, api),
+  })),
+)

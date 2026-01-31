@@ -1,4 +1,5 @@
 import { useAppStore } from '../store/useAppStore'
+import { getStepMs } from '../utils/audio'
 import { MAX_BPM, MIN_BPM } from '../utils/constants'
 import { Button } from './ui/button'
 import { Card, CardContent } from './ui/card'
@@ -11,11 +12,7 @@ import {
   SelectValue,
 } from './ui/select'
 
-type PlaybackControlsProps = {
-  stepMs: number
-}
-
-export const PlaybackControls = ({ stepMs }: PlaybackControlsProps) => {
+export const PlaybackControls = () => {
   const bpm = useAppStore((state) => state.bpm)
   const measures = useAppStore((state) => state.measures)
   const isPlaying = useAppStore((state) => state.isPlaying)
@@ -83,7 +80,9 @@ export const PlaybackControls = ({ stepMs }: PlaybackControlsProps) => {
           </Button>
         </div>
 
-        <div className="text-xs text-slate-500">Step length: {stepMs} ms</div>
+        <div className="text-xs text-slate-500">
+          Step length: {getStepMs(bpm)} ms
+        </div>
       </CardContent>
     </Card>
   )
