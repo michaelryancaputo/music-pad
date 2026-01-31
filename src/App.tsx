@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 type PresetSound = 'kick' | 'snare' | 'hat'
 
@@ -72,6 +72,7 @@ function App() {
   const recorderRef = useRef<Record<string, MediaRecorder | null>>({})
   const streamRef = useRef<Record<string, MediaStream | null>>({})
   const objectUrlsRef = useRef(new Set<string>())
+  const canceledRecordingsRef = useRef(new Set<string>())
   const lastPlayedStepRef = useRef<number | null>(null)
 
   const stepMs = useMemo(() => getStepMs(bpm), [bpm])
@@ -79,22 +80,6 @@ function App() {
   useEffect(() => {
     rowsRef.current = rows
   }, [rows])
-
-  useEffect(() => {
-    setRows((prevRows) =>
-      prevRows.map((row) => {
-        if (row.steps.length === steps) {
-          return row
-        }
-        const nextSteps = Array.from({ length: steps }, (_, index) =>
-          row.steps[index] ?? false,
-        )
-        return { ...row, steps: nextSteps }
-      }),
-    )
-    setCurrentStep(0)
-    lastPlayedStepRef.current = null
-  }, [steps])
 
   useEffect(() => {
     if (!isPlaying) {
@@ -108,20 +93,7 @@ function App() {
     return () => window.clearInterval(interval)
   }, [isPlaying, stepMs, steps])
 
-  useEffect(() => {
-    if (!isPlaying) {
-      return
-    }
-    playStep(currentStep)
-  }, [currentStep, isPlaying])
-
-  useEffect(() => {
-    return () => {
-      objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url))
-    }
-  }, [])
-
-  const ensureAudioContext = async () => {
+  const ensureAudioContext = useCallback(async () => {
     if (!audioContextRef.current) {
       audioContextRef.current = new AudioContext()
     }
@@ -129,9 +101,9 @@ function App() {
       await audioContextRef.current.resume()
     }
     return audioContextRef.current
-  }
+  }, [])
 
-  const getNoiseBuffer = (context: AudioContext) => {
+  const getNoiseBuffer = useCallback((context: AudioContext) => {
     if (noiseBufferRef.current) {
       return noiseBufferRef.current
     }
@@ -142,9 +114,10 @@ function App() {
     }
     noiseBufferRef.current = buffer
     return buffer
-  }
+  }, [])
 
-  const playPreset = async (preset: PresetSound) => {
+  const playPreset = useCallback(
+    async (preset: PresetSound) => {
     const context = await ensureAudioContext()
     const now = context.currentTime
 
@@ -188,30 +161,45 @@ function App() {
     hatNoise.connect(hatFilter).connect(hatGain).connect(context.destination)
     hatNoise.start(now)
     hatNoise.stop(now + 0.08)
-  }
+    },
+    [ensureAudioContext, getNoiseBuffer],
+  )
 
-  const playSound = async (row: Row) => {
-    if (row.source.kind === 'preset') {
-      await playPreset(row.source.preset)
+  const playSound = useCallback(
+    async (row: Row) => {
+      if (row.source.kind === 'preset') {
+        await playPreset(row.source.preset)
+        return
+      }
+
+      const audio = new Audio(row.source.url)
+      audio.volume = 0.9
+      audio.play().catch(() => {})
+    },
+    [playPreset],
+  )
+
+  useEffect(() => {
+    if (!isPlaying) {
       return
     }
-
-    const audio = new Audio(row.source.url)
-    audio.volume = 0.9
-    audio.play().catch(() => {})
-  }
-
-  const playStep = (stepIndex: number) => {
-    if (lastPlayedStepRef.current === stepIndex) {
+    if (lastPlayedStepRef.current === currentStep) {
       return
     }
-    lastPlayedStepRef.current = stepIndex
+    lastPlayedStepRef.current = currentStep
     rowsRef.current.forEach((row) => {
-      if (row.steps[stepIndex]) {
+      if (row.steps[currentStep]) {
         void playSound(row)
       }
     })
-  }
+  }, [currentStep, isPlaying, playSound])
+
+  useEffect(() => {
+    const urls = objectUrlsRef.current
+    return () => {
+      urls.forEach((url) => URL.revokeObjectURL(url))
+    }
+  }, [])
 
   const toggleCell = (rowId: string, stepIndex: number) => {
     setRows((prev) =>
@@ -240,12 +228,13 @@ function App() {
         if (row.id !== rowId) {
           return row
         }
-        if (
-          (row.source.kind === 'file' || row.source.kind === 'recorded') &&
-          row.source.url !== source.url
-        ) {
-          URL.revokeObjectURL(row.source.url)
-          objectUrlsRef.current.delete(row.source.url)
+        const sourceHasUrl =
+          source.kind === 'file' || source.kind === 'recorded'
+        if (row.source.kind === 'file' || row.source.kind === 'recorded') {
+          if (!sourceHasUrl || row.source.url !== source.url) {
+            URL.revokeObjectURL(row.source.url)
+            objectUrlsRef.current.delete(row.source.url)
+          }
         }
         return { ...row, source }
       }),
@@ -282,21 +271,26 @@ function App() {
         }
       }
       recorder.onstop = () => {
-        const blob = new Blob(chunks, {
-          type: recorder.mimeType || 'audio/webm',
-        })
-        const url = URL.createObjectURL(blob)
-        objectUrlsRef.current.add(url)
-        updateRowSource(rowId, {
-          kind: 'recorded',
-          fileName: `Recording ${new Date().toLocaleTimeString()}`,
-          url,
-        })
-        setRows((prev) =>
-          prev.map((row) =>
-            row.id === rowId ? { ...row, isRecording: false } : row,
-          ),
-        )
+        const shouldDiscard = canceledRecordingsRef.current.has(rowId)
+        if (shouldDiscard) {
+          canceledRecordingsRef.current.delete(rowId)
+        } else {
+          const blob = new Blob(chunks, {
+            type: recorder.mimeType || 'audio/webm',
+          })
+          const url = URL.createObjectURL(blob)
+          objectUrlsRef.current.add(url)
+          updateRowSource(rowId, {
+            kind: 'recorded',
+            fileName: `Recording ${new Date().toLocaleTimeString()}`,
+            url,
+          })
+          setRows((prev) =>
+            prev.map((row) =>
+              row.id === rowId ? { ...row, isRecording: false } : row,
+            ),
+          )
+        }
         stream.getTracks().forEach((track) => track.stop())
         streamRef.current[rowId] = null
         recorderRef.current[rowId] = null
@@ -311,13 +305,31 @@ function App() {
       )
       setRecordingRowId(rowId)
       recorder.start()
-    } catch (error) {
+    } catch {
       setRecordingRowId(null)
     }
   }
 
   const stopRecording = (rowId: string) => {
     recorderRef.current[rowId]?.stop()
+  }
+
+  const updateMeasures = (nextMeasures: number) => {
+    const nextSteps = BEATS_PER_MEASURE * nextMeasures
+    setMeasures(nextMeasures)
+    setRows((prevRows) =>
+      prevRows.map((row) => {
+        if (row.steps.length === nextSteps) {
+          return row
+        }
+        const resizedSteps = Array.from({ length: nextSteps }, (_, index) =>
+          row.steps[index] ?? false,
+        )
+        return { ...row, steps: resizedSteps }
+      }),
+    )
+    setCurrentStep(0)
+    lastPlayedStepRef.current = null
   }
 
   const addRow = () => {
@@ -331,6 +343,31 @@ function App() {
         isRecording: false,
       },
     ])
+  }
+
+  const removeRow = (rowId: string) => {
+    const row = rowsRef.current.find((item) => item.id === rowId)
+    if (!row) return
+
+    if (row.isRecording) {
+      canceledRecordingsRef.current.add(rowId)
+      recorderRef.current[rowId]?.stop()
+    } else {
+      streamRef.current[rowId]?.getTracks().forEach((track) => track.stop())
+      streamRef.current[rowId] = null
+      recorderRef.current[rowId] = null
+    }
+
+    if (row.source.kind === 'file' || row.source.kind === 'recorded') {
+      URL.revokeObjectURL(row.source.url)
+      objectUrlsRef.current.delete(row.source.url)
+    }
+
+    if (recordingRowId === rowId) {
+      setRecordingRowId(null)
+    }
+
+    setRows((prev) => prev.filter((item) => item.id !== rowId))
   }
 
   const togglePlayback = async () => {
@@ -351,25 +388,25 @@ function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="mx-auto flex max-w-6xl flex-col gap-8 px-6 py-10">
-        <header className="flex flex-col gap-2">
-          <p className="text-sm uppercase tracking-[0.2em] text-slate-400">
+      <div className="mx-auto flex max-w-6xl flex-col gap-5 px-4 py-6">
+        <header className="flex flex-col gap-1">
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
             Music Looper
           </p>
-          <h1 className="text-3xl font-semibold text-slate-50">
+          <h1 className="text-2xl font-semibold text-slate-50">
             Step sequencer
           </h1>
-          <p className="max-w-2xl text-sm text-slate-400">
+          <p className="max-w-2xl text-xs text-slate-400">
             Assign sounds to rows, toggle steps, and press play to loop through
             the grid.
           </p>
         </header>
 
-        <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6 shadow-lg shadow-black/30">
-          <div className="flex flex-wrap items-center gap-4">
+        <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-4 shadow-lg shadow-black/30">
+          <div className="flex flex-wrap items-center gap-3">
             <button
               onClick={togglePlayback}
-              className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+              className={`rounded-md px-3 py-1.5 text-xs font-semibold transition ${
                 isPlaying
                   ? 'bg-emerald-500/90 text-emerald-950 hover:bg-emerald-400'
                   : 'bg-slate-200 text-slate-900 hover:bg-white'
@@ -378,7 +415,7 @@ function App() {
               {isPlaying ? 'Stop' : 'Play'}
             </button>
 
-            <div className="flex items-center gap-3 text-sm text-slate-300">
+            <div className="flex items-center gap-2 text-xs text-slate-300">
               <label htmlFor="bpm" className="text-slate-400">
                 BPM
               </label>
@@ -396,14 +433,14 @@ function App() {
                     ),
                   )
                 }
-                className="w-20 rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-slate-100 focus:border-slate-400 focus:outline-none"
+                className="w-16 rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-100 focus:border-slate-400 focus:outline-none"
               />
             </div>
 
-            <div className="flex items-center gap-2 text-sm text-slate-300">
+            <div className="flex items-center gap-2 text-xs text-slate-300">
               <span className="text-slate-400">Time</span>
               <select
-                className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-slate-100"
+                className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-100"
                 value="4/4"
                 disabled
               >
@@ -412,19 +449,19 @@ function App() {
               <span className="text-slate-400">(more soon)</span>
             </div>
 
-            <div className="flex items-center gap-3 text-sm text-slate-300">
+            <div className="flex items-center gap-2 text-xs text-slate-300">
               <span className="text-slate-400">
                 Measures: {measures}
               </span>
               <button
-                onClick={() => setMeasures((prev) => prev + 1)}
-                className="rounded-md border border-slate-700 px-2 py-1 text-slate-200 hover:border-slate-500"
+                onClick={() => updateMeasures(measures + 1)}
+                className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:border-slate-500"
               >
                 +4 steps
               </button>
               <button
-                onClick={() => setMeasures((prev) => Math.max(1, prev - 1))}
-                className="rounded-md border border-slate-700 px-2 py-1 text-slate-200 hover:border-slate-500"
+                onClick={() => updateMeasures(Math.max(1, measures - 1))}
+                className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:border-slate-500"
               >
                 -4 steps
               </button>
@@ -436,19 +473,19 @@ function App() {
           </div>
         </section>
 
-        <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
+        <section className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-slate-100">Grid</h2>
+            <h2 className="text-base font-semibold text-slate-100">Grid</h2>
             <button
               onClick={addRow}
-              className="rounded-md border border-slate-700 px-3 py-1 text-sm text-slate-200 hover:border-slate-500"
+              className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:border-slate-500"
             >
               Add sound row
             </button>
           </div>
 
-          <div className="mt-6 overflow-x-auto">
-            <div className="grid gap-4">
+          <div className="mt-4 overflow-x-auto">
+            <div className="grid gap-3">
               {rows.map((row) => {
                 const sourceLabel =
                   row.source.kind === 'preset'
@@ -458,26 +495,26 @@ function App() {
                 return (
                   <div
                     key={row.id}
-                    className="grid items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/40 p-4 lg:grid-cols-[220px_1fr]"
+                    className="grid items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/40 p-3 lg:grid-cols-[210px_1fr]"
                   >
-                    <div className="flex flex-col gap-2">
+                    <div className="flex flex-col gap-1.5">
                       <input
                         value={row.name}
                         onChange={(event) =>
                           updateRowName(row.id, event.target.value)
                         }
-                        className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+                        className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100"
                         placeholder="Sound name"
                       />
 
-                      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                      <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-400">
                         <span>Source:</span>
                         <span className="rounded-full bg-slate-800 px-2 py-1">
                           {sourceLabel}
                         </span>
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-300">
+                      <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-300">
                         <select
                           value={
                             row.source.kind === 'preset'
@@ -490,7 +527,7 @@ function App() {
                               event.target.value as PresetSound,
                             )
                           }
-                          className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-slate-100"
+                          className="rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-[11px] text-slate-100"
                         >
                           <option value="">Choose preset</option>
                           <option value="kick">Kick</option>
@@ -498,7 +535,7 @@ function App() {
                           <option value="hat">Hi-hat</option>
                         </select>
 
-                        <label className="cursor-pointer rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-200 hover:border-slate-500">
+                        <label className="cursor-pointer rounded-md border border-slate-700 px-2 py-1 text-[11px] text-slate-200 hover:border-slate-500">
                           Choose file
                           <input
                             type="file"
@@ -520,7 +557,7 @@ function App() {
                             Boolean(recordingRowId) &&
                             recordingRowId !== row.id
                           }
-                          className={`rounded-md border px-2 py-1 text-xs transition ${
+                          className={`rounded-md border px-2 py-1 text-[11px] transition ${
                             row.isRecording
                               ? 'border-red-400 text-red-200 hover:border-red-300'
                               : 'border-slate-700 text-slate-200 hover:border-slate-500'
@@ -528,10 +565,17 @@ function App() {
                         >
                           {row.isRecording ? 'Stop' : 'Record'}
                         </button>
+
+                        <button
+                          onClick={() => removeRow(row.id)}
+                          className="rounded-md border border-slate-700 px-2 py-1 text-[11px] text-slate-200 hover:border-red-400 hover:text-red-200"
+                        >
+                          Remove
+                        </button>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-[repeat(auto-fit,minmax(36px,1fr))] gap-2">
+                    <div className="grid grid-cols-[repeat(auto-fit,minmax(30px,1fr))] gap-1.5">
                       {row.steps.map((isActive, stepIndex) => {
                         const isCurrent = stepIndex === currentStep
                         return (
